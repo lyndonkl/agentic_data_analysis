@@ -107,7 +107,7 @@ const inspectField = (field: string) => {
 
 async function generateFieldDescriptions(fields: Record<string, FieldMetadata>): Promise<Record<string, string>> {
   const model = new ChatOpenAI({
-    modelName: "gpt-4",
+    modelName: "gpt-4o",
     temperature: 0.1,
   });
 
@@ -147,7 +147,7 @@ async function generateDatasetSummary(
   rowCount: number
 ): Promise<string> {
   const model = new ChatOpenAI({
-    modelName: "gpt-4",
+    modelName: "gpt-4o",
     temperature: 0.1,
   });
 
