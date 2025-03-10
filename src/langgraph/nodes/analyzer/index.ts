@@ -203,6 +203,8 @@ export async function dataAnalyzer(state: GraphState): Promise<Partial<GraphStat
         examples: analysis.samples
       };
     }
+    
+    console.log(metadataFields);
 
     // Second pass: Generate AI descriptions for each field
     const descriptions = await generateFieldDescriptions(metadataFields);
@@ -214,6 +216,8 @@ export async function dataAnalyzer(state: GraphState): Promise<Partial<GraphStat
 
     // Third pass: Generate overall dataset summary
     const summary = await generateDatasetSummary(metadataFields, state.data.length);
+
+    console.log(metadataFields);
 
     return {
       metadata: {
