@@ -40,7 +40,7 @@ export async function questionGenerator(state: GraphState): Promise<Partial<Grap
     }
 
     const model = new ChatOpenAI({
-      modelName: "gpt-4",
+      modelName: "gpt-4o",
       temperature: 0.7, // Higher temperature for more diverse questions
     });
 
