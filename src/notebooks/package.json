@@ -1,0 +1,16 @@
+{
+  "name": "agentic-data-analysis-notebooks",
+  "version": "1.0.0",
+  "description": "Analysis notebooks for agentic data analysis system",
+  "scripts": {
+    "prestart": "./rebuild.sh",
+    "start": "dotenv jupyter lab",
+    "rebuild": "./rebuild.sh"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^8.0.0"
+  },
+  "dependencies": {
+    "csv-parse": "^5.6.0"
+  }
+} 

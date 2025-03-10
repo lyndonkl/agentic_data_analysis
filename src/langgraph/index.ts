@@ -1,21 +1,22 @@
-import { StateGraph } from '@langchain/langgraph';
-import { BaseMessage } from '@langchain/core/messages';
-import { RunnableConfig } from '@langchain/core/runnables';
-import { GraphState } from './types';
-import { initializeState } from './state';
+import { START, END, StateGraph } from '@langchain/langgraph';
+import { StateAnnotation } from './state';
+import { dataAnalyzer } from './nodes/analyzer';
 
 export const createAnalysisGraph = () => {
   // Initialize the graph
-  const workflow = new StateGraph<GraphState>({
-    channels: ['analysis_result']
-  });
+  const workflow = new StateGraph(StateAnnotation)
+    .addNode("analyzer", dataAnalyzer)
+    .addEdge(START, "analyzer")
+    .addEdge("analyzer", END)
+    .compile();
 
-  // Add nodes and edges will be implemented here
-  
-  // Compile the graph
-  return workflow.compile();
+  return workflow;
 };
 
+// Create and export the graph instance
+const analysisGraph = createAnalysisGraph();
+
+export { analysisGraph };
 export * from './types';
 export * from './state';
-export * from './nodes'; 
+export * from './nodes/analyzer';
