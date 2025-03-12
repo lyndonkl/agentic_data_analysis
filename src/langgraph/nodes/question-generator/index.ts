@@ -1,9 +1,23 @@
 import { ChatOpenAI } from "@langchain/openai";
-import { SystemMessage, HumanMessage, BaseMessage } from "@langchain/core/messages";
+import { SystemMessage, HumanMessage, BaseMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
 import { StructuredOutputParser } from "@langchain/core/output_parsers";
 import { GraphState, VisualizationQuestion, VisualizationQuestionSchema } from "../../types";
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
+import { visualizationTools } from "../../tools/visualization";
+import { type BaseMessageLike } from "@langchain/core/messages";
+import { type ToolCall } from "@langchain/core/messages/tool";
+import { addMessages } from "@langchain/langgraph";
+
+// Tool argument types
+interface SuggestGraphsArgs {
+  numericCount: number;
+  categoricalCount: number;
+  numericOrdered: boolean;
+  pointCount: 'few' | 'many';
+}
+
+type ToolArgs = SuggestGraphsArgs | Record<string, never>;
 
 const outputParser = StructuredOutputParser.fromZodSchema(
   z.object({
@@ -33,6 +47,23 @@ DO NOT:
 
 ${outputParser.getFormatInstructions()}`;
 
+// Create a map of tools by name for easy lookup
+const toolsByName = Object.fromEntries(visualizationTools.map((tool) => [tool.name, tool]));
+
+// Function to call a specific tool
+async function callTool(toolCall: ToolCall): Promise<ToolMessage> {
+  const tool = toolsByName[toolCall.name];
+  if (!tool) {
+    throw new Error(`Tool ${toolCall.name} not found`);
+  }
+  if (!toolCall.id) {
+    throw new Error('Tool call ID is required');
+  }
+  
+  const observation = await tool.invoke(toolCall);
+  return new ToolMessage({ content: observation, tool_call_id: toolCall.id });
+}
+
 export async function questionGenerator(state: GraphState): Promise<Partial<GraphState>> {
   try {
     if (!state.metadata) {
@@ -42,10 +73,9 @@ export async function questionGenerator(state: GraphState): Promise<Partial<Grap
     const model = new ChatOpenAI({
       modelName: "gpt-4o",
       temperature: 0.7, // Higher temperature for more diverse questions
-    });
+    }).bindTools(visualizationTools);
 
     const prompt = `Analyze this dataset and generate visualization questions:
-
 Dataset Summary:
 ${state.metadata.summary}
 
@@ -67,16 +97,41 @@ Focus on questions that:
 - Explore distributions of numeric fields
 - Compare categories
 - Look for relationships between fields
-- Analyze patterns in the data`;
+- Analyze patterns in the data
 
-    const response = await model.invoke([
+You have access to two tools:
+1. getGraphCatalog: Returns a list of all available graph types and when to use them
+2. suggestGraphs: Suggests appropriate graph types based on the data structure`;
+
+    let currentMessages: BaseMessageLike[] = [
       new SystemMessage(QUESTION_GENERATOR_PROMPT),
       new HumanMessage(prompt)
-    ]);
+    ];
 
+    // Initial model call with tools bound
+    let llmResponse = await model.invoke(currentMessages);
+
+    while (true) {
+      if (!llmResponse.tool_calls?.length) {
+        break;
+      }
+
+      // Execute tools
+      const toolResults = await Promise.all(
+        llmResponse.tool_calls.map((toolCall) => callTool(toolCall))
+      );
+
+      // Append to message list
+      currentMessages = addMessages(currentMessages, [llmResponse, ...toolResults]);
+
+      // Call model again
+      llmResponse = await model.invoke(currentMessages);
+    }
+
+    // Parse the final response
     let parsedOutput;
-    if (response instanceof BaseMessage) {
-      parsedOutput = await outputParser.parse(response.content.toString());
+    if (llmResponse instanceof BaseMessage) {
+      parsedOutput = await outputParser.parse(llmResponse.content.toString());
     } else {
       throw new Error("Unexpected response format from model");
     }
