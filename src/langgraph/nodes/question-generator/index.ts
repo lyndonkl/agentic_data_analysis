@@ -31,9 +31,15 @@ const outputParser = StructuredOutputParser.fromZodSchema(
 
 const QUESTION_GENERATOR_PROMPT = `You are a Data Visualization Expert specializing in exploratory data analysis. Your task is to generate insightful questions that can be answered through data visualization.
 
+IMPORTANT: Before generating questions, you MUST:
+1. First call getGraphCatalog to understand what visualization types are available
+2. Then use suggestGraphs with appropriate parameters to get recommended visualizations for specific data combinations
+
+You can ONLY suggest visualizations that are returned by these tools. Do not suggest any visualization types that aren't explicitly supported.
+
 For each question you generate, you must:
 1. Focus only on the fields present in the dataset
-2. Suggest questions that can be answered with basic charts (bar, line, scatter, pie, histogram)
+2. Use ONLY visualization types that were returned by the tools
 3. Consider relationships between fields that might reveal interesting patterns
 4. Prioritize questions that help understand distributions, trends, and relationships
 
@@ -41,13 +47,22 @@ Each question must be:
 - Specific and focused on 1-2 fields
 - Answerable through visual analysis
 - Relevant to understanding the data's patterns
-- Suitable for basic charting (no complex statistical analysis)
+- Use ONLY supported visualization types (as returned by the tools)
 
 DO NOT:
 - Suggest questions requiring fields not in the dataset
 - Ask questions needing advanced statistical analysis
 - Generate questions about predictions or future trends
 - Include questions requiring data transformation
+- Suggest visualization types not returned by the tools
+
+Available Tools:
+1. getGraphCatalog: Call this FIRST to get a list of all available graph types and when to use them
+2. suggestGraphs: Call this to get specific visualization recommendations based on:
+   - numericCount: number of numeric variables you want to visualize
+   - categoricalCount: number of categorical variables you want to visualize
+   - numericOrdered: whether numeric variables represent an ordered sequence
+   - pointCount: "few" or "many" data points
 
 ${outputParser.getFormatInstructions()}`;
 
@@ -168,8 +183,12 @@ ${meta.range?.min !== undefined ? `- Range: ${meta.range.min} to ${meta.range.ma
 ${meta.range?.uniqueValues ? `- Unique Values: ${meta.range.uniqueValues.length} different values` : ''}
 `).join('\n')}
 
-Generate at least 10 questions that can be answered through basic data visualizations. For each question:
-1. Specify which visualization type is most appropriate (bar, line, scatter, pie, or histogram)
+IMPORTANT: Before suggesting any visualizations:
+1. First use getGraphCatalog to understand what visualization types we support
+2. Then use suggestGraphs to get specific recommendations based on the field combinations you want to analyze
+
+Generate at least 10 questions that can be answered through data visualizations. For each question:
+1. Use ONLY visualization types that were returned by the tools
 2. List the specific fields needed for the visualization
 3. Explain why this visualization would be insightful
 
@@ -179,9 +198,9 @@ Focus on questions that:
 - Look for relationships between fields
 - Analyze patterns in the data
 
-You have access to two tools:
-1. getGraphCatalog: Returns a list of all available graph types and when to use them
-2. suggestGraphs: Suggests appropriate graph types based on the data structure`;
+Remember:
+- You MUST call getGraphCatalog first to see available visualization types
+- Then use suggestGraphs to get specific recommendations for your field combinations`;
 
     let currentMessages: BaseMessageLike[] = [
       new SystemMessage(QUESTION_GENERATOR_PROMPT),
