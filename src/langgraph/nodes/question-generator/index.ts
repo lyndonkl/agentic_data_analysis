@@ -111,7 +111,26 @@ const callTool = task(
       tool_call_id: toolCall.id
     }, null, 2));
     
-    const message = new ToolMessage({ content: observation, tool_call_id: toolCall.id });
+    // Extract the actual content from the tool response
+    let content: string;
+    if (typeof observation === 'object' && observation !== null) {
+      if ('kwargs' in observation && typeof observation.kwargs === 'object' && observation.kwargs !== null) {
+        // If it's a serialized message object, get the content from kwargs
+        content = observation.kwargs.content;
+      } else {
+        // If it's a regular object (like the graph suggestions), stringify it
+        content = JSON.stringify(observation);
+      }
+    } else {
+      // If it's already a string or primitive, use it as is
+      content = String(observation);
+    }
+    
+    const message = new ToolMessage({
+      content,
+      tool_call_id: toolCall.id,
+      name: toolCall.name
+    });
     
     console.log("\nTool Message:", JSON.stringify({
       _type: message.constructor.name,
