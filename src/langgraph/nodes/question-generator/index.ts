@@ -61,7 +61,26 @@ const callModel = task(
     messages: BaseMessageLike[], 
     model: Runnable<BaseLanguageModelInput, AIMessageChunk>
   ) => {
+    console.log("\n=== Calling Model ===");
+    console.log("Input Messages:", JSON.stringify(messages.map(m => {
+      if (m instanceof BaseMessage) {
+        return {
+          _type: m.constructor.name,
+          content: m.content,
+          kwargs: m.additional_kwargs
+        };
+      }
+      return { _type: 'string', content: m };
+    }), null, 2));
+    
     const response = await model.invoke(messages);
+    
+    console.log("\nModel Response:", JSON.stringify({
+      _type: response.constructor.name,
+      content: response.content,
+      tool_calls: response.tool_calls
+    }, null, 2));
+    
     return response;
   }
 );
@@ -70,6 +89,13 @@ const callModel = task(
 const callTool = task(
   "callTool",
   async (toolCall: ToolCall): Promise<ToolMessage> => {
+    console.log("\n=== Calling Tool ===");
+    console.log("Tool Call:", JSON.stringify({
+      name: toolCall.name,
+      id: toolCall.id,
+      args: toolCall.args
+    }, null, 2));
+    
     const tool = toolsByName[toolCall.name];
     if (!tool) {
       throw new Error(`Tool ${toolCall.name} not found`);
@@ -77,8 +103,23 @@ const callTool = task(
     if (!toolCall.id) {
       throw new Error('Tool call ID is required');
     }
+    
     const observation = await tool.invoke(toolCall);
-    return new ToolMessage({ content: observation, tool_call_id: toolCall.id });
+    
+    console.log("\nTool Response:", JSON.stringify({
+      content: observation,
+      tool_call_id: toolCall.id
+    }, null, 2));
+    
+    const message = new ToolMessage({ content: observation, tool_call_id: toolCall.id });
+    
+    console.log("\nTool Message:", JSON.stringify({
+      _type: message.constructor.name,
+      content: message.content,
+      kwargs: message.additional_kwargs
+    }, null, 2));
+    
+    return message;
   }
 );
 
@@ -88,9 +129,11 @@ export async function questionGenerator(state: GraphState): Promise<Partial<Grap
       throw new Error("Metadata required for question generation");
     }
 
+    console.log("\n=== Starting Question Generator ===");
+    
     const model = new ChatOpenAI({
       modelName: "gpt-4o",
-      temperature: 0.7, // Higher temperature for more diverse questions
+      temperature: 0.7,
     }).bindTools(visualizationTools);
 
     const prompt = `Analyze this dataset and generate visualization questions:
@@ -126,31 +169,54 @@ You have access to two tools:
       new HumanMessage(prompt)
     ];
 
+    console.log("\nInitial Messages:", JSON.stringify(currentMessages.map(m => {
+      if (m instanceof BaseMessage) {
+        return {
+          _type: m.constructor.name,
+          content: m.content?.toString().slice(0, 100) + "..." // Truncate for readability
+        };
+      }
+      return { _type: 'string', content: m };
+    }), null, 2));
+
     // Initial model call with tools bound
     let llmResponse = await callModel(currentMessages, model);
 
     while (true) {
       if (!llmResponse.tool_calls?.length) {
+        console.log("\n=== No more tool calls, breaking loop ===");
         break;
       }
+
+      console.log("\n=== Processing Tool Calls ===");
+      console.log("Number of tool calls:", llmResponse.tool_calls.length);
 
       // Execute tools
       const toolResults = await Promise.all(
         llmResponse.tool_calls.map((toolCall) => callTool(toolCall))
       );
 
+      console.log("\n=== Adding Messages to Context ===");
+      console.log("Current message count:", currentMessages.length);
+      console.log("Adding response and", toolResults.length, "tool results");
+
       // Append to message list
       currentMessages = addMessages(currentMessages, [llmResponse, ...toolResults]);
+
+      console.log("New message count:", currentMessages.length);
 
       // Call model again
       llmResponse = await callModel(currentMessages, model);
     }
 
+    console.log("\n=== Parsing Final Response ===");
     // Parse the final response
     let parsedOutput;
     if (llmResponse instanceof BaseMessage) {
+      console.log("Response is BaseMessage, parsing content");
       parsedOutput = await outputParser.parse(llmResponse.content.toString());
     } else {
+      console.log("Unexpected response type:", typeof llmResponse);
       throw new Error("Unexpected response format from model");
     }
     
@@ -159,6 +225,9 @@ You have access to two tools:
       id: uuidv4(),
       ...q
     }));
+
+    console.log("\n=== Question Generation Complete ===");
+    console.log("Generated", questions.length, "questions");
 
     // Update metadata with generated questions
     return {
@@ -171,7 +240,9 @@ You have access to two tools:
       }
     };
   } catch (error) {
-    console.error("Error generating questions:", error);
+    console.error("\n=== Error in Question Generator ===");
+    console.error("Error:", error);
+    console.error("Stack:", error instanceof Error ? error.stack : "No stack trace");
     return {
       metadata: {
         fields: state.metadata?.fields ?? {},
