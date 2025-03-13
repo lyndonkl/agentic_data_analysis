@@ -8,6 +8,10 @@ import { visualizationTools } from "../../tools/visualization";
 import { type BaseMessageLike } from "@langchain/core/messages";
 import { type ToolCall } from "@langchain/core/messages/tool";
 import { addMessages } from "@langchain/langgraph";
+import { task } from "@langchain/langgraph";
+import { Runnable } from "@langchain/core/runnables";
+import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
+import { AIMessageChunk } from "@langchain/core/messages";
 
 // Tool argument types
 interface SuggestGraphsArgs {
@@ -50,19 +54,33 @@ ${outputParser.getFormatInstructions()}`;
 // Create a map of tools by name for easy lookup
 const toolsByName = Object.fromEntries(visualizationTools.map((tool) => [tool.name, tool]));
 
-// Function to call a specific tool
-async function callTool(toolCall: ToolCall): Promise<ToolMessage> {
-  const tool = toolsByName[toolCall.name];
-  if (!tool) {
-    throw new Error(`Tool ${toolCall.name} not found`);
+// Task for calling the model
+const callModel = task(
+  "callModel", 
+  async (
+    messages: BaseMessageLike[], 
+    model: Runnable<BaseLanguageModelInput, AIMessageChunk>
+  ) => {
+    const response = await model.invoke(messages);
+    return response;
   }
-  if (!toolCall.id) {
-    throw new Error('Tool call ID is required');
+);
+
+// Task for calling tools
+const callTool = task(
+  "callTool",
+  async (toolCall: ToolCall): Promise<ToolMessage> => {
+    const tool = toolsByName[toolCall.name];
+    if (!tool) {
+      throw new Error(`Tool ${toolCall.name} not found`);
+    }
+    if (!toolCall.id) {
+      throw new Error('Tool call ID is required');
+    }
+    const observation = await tool.invoke(toolCall);
+    return new ToolMessage({ content: observation, tool_call_id: toolCall.id });
   }
-  
-  const observation = await tool.invoke(toolCall);
-  return new ToolMessage({ content: observation, tool_call_id: toolCall.id });
-}
+);
 
 export async function questionGenerator(state: GraphState): Promise<Partial<GraphState>> {
   try {
@@ -109,7 +127,7 @@ You have access to two tools:
     ];
 
     // Initial model call with tools bound
-    let llmResponse = await model.invoke(currentMessages);
+    let llmResponse = await callModel(currentMessages, model);
 
     while (true) {
       if (!llmResponse.tool_calls?.length) {
@@ -125,7 +143,7 @@ You have access to two tools:
       currentMessages = addMessages(currentMessages, [llmResponse, ...toolResults]);
 
       // Call model again
-      llmResponse = await model.invoke(currentMessages);
+      llmResponse = await callModel(currentMessages, model);
     }
 
     // Parse the final response
