@@ -157,6 +157,14 @@ const callTool = task(
   }
 );
 
+// Helper function to strip markdown code blocks if present
+function stripMarkdownCodeBlock(content: string): string {
+  // Match ```json ... ``` or ``` ... ``` patterns
+  const codeBlockRegex = /^```(?:json)?\n([\s\S]*?)\n```$/;
+  const match = content.trim().match(codeBlockRegex);
+  return match ? match[1].trim() : content.trim();
+}
+
 export async function questionGenerator(state: GraphState): Promise<Partial<GraphState>> {
   try {
     if (!state.metadata) {
@@ -252,7 +260,9 @@ Remember:
     let parsedOutput;
     if (llmResponse instanceof BaseMessage) {
       console.log("Response is BaseMessage, parsing content");
-      parsedOutput = await outputParser.parse(llmResponse.content.toString());
+      const content = stripMarkdownCodeBlock(llmResponse.content.toString());
+      console.log("Cleaned content:", content.slice(0, 100) + "..."); // Log first 100 chars
+      parsedOutput = await outputParser.parse(content);
     } else {
       console.log("Unexpected response type:", typeof llmResponse);
       throw new Error("Unexpected response format from model");
