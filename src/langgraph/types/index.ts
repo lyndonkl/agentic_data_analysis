@@ -17,7 +17,7 @@ export const FieldMetadataSchema = z.object({
 export const VisualizationQuestionSchema = z.object({
   id: z.string(),
   question: z.string(),
-  type: z.enum(['bar', 'line', 'scatter', 'pie', 'histogram']),
+  type: z.enum(['histogram', 'density-plot', 'boxplot', 'violin-plot', 'lollipop-plot', 'barplot', 'scatterplot', 'connected-scatterplot', 'area-plot', 'stacked-area', 'streamgraph', 'heatmap']),
   fields: z.array(z.string()),
   description: z.string()
 });
